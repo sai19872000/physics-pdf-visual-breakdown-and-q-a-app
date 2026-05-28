@@ -3,7 +3,7 @@
 Do not hand-edit unless you're willing to take ownership — the next
 compose run will overwrite this file.
 
-AURACLE_EMIT_VERSION:iter38 — see compose.py _is_stale_compose for the
+AURACLE_EMIT_VERSION:iter39 — see compose.py _is_stale_compose for the
 short-circuit-bypass marker. Bump when emit_server's contract changes
 in a way that requires already-composed product repos to be re-emitted.
 """
@@ -277,9 +277,9 @@ ROUTES: list[dict] = [
       }
     },
     "helpers": {
-      "fmtRel": "const fmtRel = (ts) => {\n    const d = NOW - ts;\n    if (d < 60 * SEC) return Math.max(1, Math.round(d / SEC)) + 's ago';\n    if (d < 60 * MIN) return Math.round(d / MIN) + 'm ago';\n    if (d < 24 * HR)  return Math.round(d / HR) + 'h ago';\n    return Math.round(d / DAY) + 'd ago';\n  }",
+      "makeEvent": "const makeEvent = (i) => {\n    const t = EVT_TEMPLATES[i % EVT_TEMPLATES.length];\n    return {\n      id: 'evt_' + (NOW - i * 1234).toString(36),\n      ts: NOW - i * (12 + (i * 7) % 40) * SEC,\n      topic: t.topic,\n      skill: t.skill,\n      stepId: 'stp_' + (0xb000 + i * 41).toString(16),\n      status: t.status,\n    };\n  }",
       "fmtTime": "const fmtTime = (ts) => {\n    const d = new Date(ts);\n    const hh = String(d.getHours()).padStart(2, '0');\n    const mm = String(d.getMinutes()).padStart(2, '0');\n    const ss = String(d.getSeconds()).padStart(2, '0');\n    return hh + ':' + mm + ':' + ss;\n  }",
-      "makeEvent": "const makeEvent = (i) => {\n    const t = EVT_TEMPLATES[i % EVT_TEMPLATES.length];\n    return {\n      id: 'evt_' + (NOW - i * 1234).toString(36),\n      ts: NOW - i * (12 + (i * 7) % 40) * SEC,\n      topic: t.topic,\n      skill: t.skill,\n      stepId: 'stp_' + (0xb000 + i * 41).toString(16),\n      status: t.status,\n    };\n  }"
+      "fmtRel": "const fmtRel = (ts) => {\n    const d = NOW - ts;\n    if (d < 60 * SEC) return Math.max(1, Math.round(d / SEC)) + 's ago';\n    if (d < 60 * MIN) return Math.round(d / MIN) + 'm ago';\n    if (d < 24 * HR)  return Math.round(d / HR) + 'h ago';\n    return Math.round(d / DAY) + 'd ago';\n  }"
     }
   }
 ]
@@ -532,9 +532,9 @@ MOCK_BINDINGS: dict = {
     }
   },
   "helpers": {
-    "fmtRel": "const fmtRel = (ts) => {\n    const d = NOW - ts;\n    if (d < 60 * SEC) return Math.max(1, Math.round(d / SEC)) + 's ago';\n    if (d < 60 * MIN) return Math.round(d / MIN) + 'm ago';\n    if (d < 24 * HR)  return Math.round(d / HR) + 'h ago';\n    return Math.round(d / DAY) + 'd ago';\n  }",
+    "makeEvent": "const makeEvent = (i) => {\n    const t = EVT_TEMPLATES[i % EVT_TEMPLATES.length];\n    return {\n      id: 'evt_' + (NOW - i * 1234).toString(36),\n      ts: NOW - i * (12 + (i * 7) % 40) * SEC,\n      topic: t.topic,\n      skill: t.skill,\n      stepId: 'stp_' + (0xb000 + i * 41).toString(16),\n      status: t.status,\n    };\n  }",
     "fmtTime": "const fmtTime = (ts) => {\n    const d = new Date(ts);\n    const hh = String(d.getHours()).padStart(2, '0');\n    const mm = String(d.getMinutes()).padStart(2, '0');\n    const ss = String(d.getSeconds()).padStart(2, '0');\n    return hh + ':' + mm + ':' + ss;\n  }",
-    "makeEvent": "const makeEvent = (i) => {\n    const t = EVT_TEMPLATES[i % EVT_TEMPLATES.length];\n    return {\n      id: 'evt_' + (NOW - i * 1234).toString(36),\n      ts: NOW - i * (12 + (i * 7) % 40) * SEC,\n      topic: t.topic,\n      skill: t.skill,\n      stepId: 'stp_' + (0xb000 + i * 41).toString(16),\n      status: t.status,\n    };\n  }"
+    "fmtRel": "const fmtRel = (ts) => {\n    const d = NOW - ts;\n    if (d < 60 * SEC) return Math.max(1, Math.round(d / SEC)) + 's ago';\n    if (d < 60 * MIN) return Math.round(d / MIN) + 'm ago';\n    if (d < 24 * HR)  return Math.round(d / HR) + 'h ago';\n    return Math.round(d / DAY) + 'd ago';\n  }"
   }
 }
 
@@ -836,6 +836,37 @@ def _make_mock_key_handler(top_key: str) -> Any:
         # If only one leaf and it IS the top key, return raw
         if len(keys) == 1 and keys[0] == top_key:
             return web.json_response(results[0])
+        # iter-39 fix: when leaves are array-shape (TOPKEY[].field), zip
+        # them into [{field1: arr1[i], field2: arr2[i], ...}, ...]
+        # instead of the broken nested-dict assembly that produced
+        # {"": {"id": [...]}}. Triggered whenever any matched leaf
+        # path contains "[]" — those are per-field array projections
+        # of the same parent list and must reassemble PER-ITEM.
+        array_keys = [k for k in keys if "[]" in k]
+        if array_keys and len(array_keys) == len(keys):
+            # Pure array-shape — collect field names + each list, zip.
+            fields: list[tuple[str, list]] = []
+            for lk, val in zip(keys, results):
+                if not isinstance(val, list):
+                    continue
+                rel = lk[len(top_key):].lstrip(".")
+                field_name = rel.replace("[]", "").lstrip(".") or "value"
+                fields.append((field_name, val))
+            if not fields:
+                return web.json_response([])
+            n = min(len(arr) for _, arr in fields)
+            items = []
+            for i in range(n):
+                row: dict = {}
+                for fname, arr in fields:
+                    elem = arr[i]
+                    # If the leaf value is itself a dict, spread it.
+                    if isinstance(elem, dict) and fname == "value":
+                        row.update(elem)
+                    else:
+                        row[fname] = elem
+                items.append(row)
+            return web.json_response(items)
         # Otherwise assemble the nested shape under the top key
         out: dict = {}
         for lk, val in zip(keys, results):
