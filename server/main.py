@@ -1,3 +1,4 @@
+# AURACLE_EMIT_VERSION:iter39
 """Aura Physics App Backend - custom Q&A server with Gemini 2.5 Flash integration."""
 from __future__ import annotations
 
