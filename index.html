@@ -2,7 +2,7 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
-<title>Aura · Physics Q&A</title>
+<title>auracle · cockpit</title>
 <meta name="viewport" content="width=1280">
 <link rel="icon" href="aura-mark.svg" type="image/svg+xml">
 <link rel="stylesheet" href="tokens.css">
@@ -16,8 +16,16 @@
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
-<!-- components and app shell -->
+<!-- mock data first (plain JS, no JSX) -->
+<script src="mock-data.js"></script>
+
+<!-- Tweaks helper -->
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+
+<!-- shared primitives, then inspector, then views, then app -->
 <script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="inspector.jsx"></script>
+<script type="text/babel" src="views.jsx"></script>
 <script type="text/babel" src="app.jsx"></script>
 
 </body>
